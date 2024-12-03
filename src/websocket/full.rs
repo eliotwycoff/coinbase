@@ -58,9 +58,11 @@ pub enum Message<'ws> {
     },
     Change {
         time: OffsetDateTime,
+        // TODO: Finish this
     },
     Activate {
         time: OffsetDateTime,
+        // TODO: Finish this
     },
 }
 
