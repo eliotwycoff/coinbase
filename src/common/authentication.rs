@@ -19,7 +19,7 @@ impl TryFrom<&str> for Signer {
 }
 
 impl Signer {
-    fn get_cb_access_sign(
+    pub fn get_cb_access_sign(
         &self,
         cb_access_timestamp: &str,
         request_path: &str,

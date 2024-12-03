@@ -9,6 +9,7 @@ pub enum Error {
     Http(hyper::http::Error),
     WebSocket(fastwebsockets::WebSocketError),
     SystemTime(std::time::SystemTimeError),
+    Json(serde_json::Error),
 }
 
 impl From<base64::DecodeError> for Error {
@@ -47,6 +48,12 @@ impl From<std::time::SystemTimeError> for Error {
     }
 }
 
+impl From<serde_json::Error> for Error {
+    fn from(error: serde_json::Error) -> Self {
+        Self::Json(error)
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -56,6 +63,7 @@ impl std::fmt::Display for Error {
             Self::Http(error) => write!(f, "Http error => {error}"),
             Self::WebSocket(error) => write!(f, "WebSocket error => {error}"),
             Self::SystemTime(error) => write!(f, "System time error => {error}"),
+            Self::Json(error) => write!(f, "Json error => {error}"),
         }
     }
 }
