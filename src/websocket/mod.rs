@@ -12,12 +12,17 @@ use hyper::{
     Request,
 };
 use hyper_util::rt::TokioIo;
+use rustls_pki_types::ServerName;
 use std::{
     future::Future,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::net::TcpStream;
+use tokio_rustls::{
+    rustls::{ClientConfig, RootCertStore},
+    TlsConnector,
+};
 
 pub mod full;
 
@@ -43,7 +48,7 @@ impl Client {
         let product_id: &'static str = product_id.into();
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)?
-            .as_millis()
+            .as_secs()
             .to_string();
         let signature =
             self.signer
@@ -57,15 +62,28 @@ impl Client {
             "timestamp": timestamp,
         }))?;
 
+        println!("subscription message => {subscription_message}");
+
         // Connect to the endpoint.
-        let stream = TcpStream::connect("ws-direct.sandbox.exchange.coinbase.com:443").await?; // change to ws direct?
+        let tcp_stream = TcpStream::connect("ws-direct.exchange.coinbase.com:443").await?;
 
-        // TODO: Upgrade to TLS with tokio-rustls.
+        // Upgrade to TLS.
+        let mut root_cert_store = RootCertStore::empty();
 
+        root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+        let tls_config = ClientConfig::builder()
+            .with_root_certificates(root_cert_store)
+            .with_no_client_auth();
+        let tls_connector = TlsConnector::from(Arc::new(tls_config));
+        let tls_domain = ServerName::try_from("ws-direct.exchange.coinbase.com")?;
+        let tls_stream = tls_connector.connect(tls_domain, tcp_stream).await?;
+
+        // Upgrade to WSS.
         let request = Request::builder()
             .method("GET")
-            .uri(format!("https://ws-direct.sandbox.exchange.coinbase.com/"))
-            .header("HOST", "ws-direct.sandbox.exchange.coinbase.com:443")
+            .uri(format!("https://ws-direct.exchange.coinbase.com/"))
+            .header("HOST", "ws-direct.exchange.coinbase.com")
             .header(UPGRADE, "websocket")
             .header(CONNECTION, "upgrade")
             .header(
@@ -75,7 +93,7 @@ impl Client {
             .header("Sec-WebSocket-Version", "13")
             .body(Empty::<Bytes>::new())?;
         println!("Creating websocket");
-        let (mut ws, _) = handshake::client(&SpawnExecutor, request, stream).await?;
+        let (mut ws, _) = handshake::client(&SpawnExecutor, request, tls_stream).await?;
 
         // Configure the connection.
         println!("Configuring connection");
@@ -92,10 +110,26 @@ impl Client {
 
         // Loop through and deserialize the incoming messages.
         loop {
-            let frame = ws.read_frame().await?;
-            let message = serde_json::from_slice::<Message>(&frame.payload.as_ref())?;
+            println!("Reading frame!");
+            let frame = match ws.read_frame().await {
+                Ok(frame) => frame,
+                Err(error) => {
+                    println!("Error => {error}");
 
-            println!("message => {message:?}");
+                    ws.write_frame(Frame::close_raw(vec![].into())).await?;
+
+                    break;
+                }
+            };
+
+            println!(
+                "frame => {}",
+                std::str::from_utf8(frame.payload.as_ref()).unwrap()
+            );
+
+            // let message = serde_json::from_slice::<Message>(&frame.payload.as_ref())?;
+
+            // println!("message => {message:?}");
         }
 
         Ok(())

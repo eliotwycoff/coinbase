@@ -10,6 +10,7 @@ pub enum Error {
     WebSocket(fastwebsockets::WebSocketError),
     SystemTime(std::time::SystemTimeError),
     Json(serde_json::Error),
+    DnsName(rustls_pki_types::InvalidDnsNameError),
 }
 
 impl From<base64::DecodeError> for Error {
@@ -54,6 +55,12 @@ impl From<serde_json::Error> for Error {
     }
 }
 
+impl From<rustls_pki_types::InvalidDnsNameError> for Error {
+    fn from(error: rustls_pki_types::InvalidDnsNameError) -> Self {
+        Self::DnsName(error)
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -64,6 +71,7 @@ impl std::fmt::Display for Error {
             Self::WebSocket(error) => write!(f, "WebSocket error => {error}"),
             Self::SystemTime(error) => write!(f, "System time error => {error}"),
             Self::Json(error) => write!(f, "Json error => {error}"),
+            Self::DnsName(error) => write!(f, "Dns name error => {error}"),
         }
     }
 }

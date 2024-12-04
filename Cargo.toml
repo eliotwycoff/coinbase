@@ -4,21 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.41.1", features = [
-    "rt-multi-thread",
-    "net",
-    "macros",
-    "parking_lot",
-] }
-tokio-rustls = "0.26.0"
-
 # Types
 bigdecimal = { version = "0.4.6", features = ["serde-json"] }
+rustls-pki-types = "1.10.0"
 serde = { version = "1.0.215", features = ["derive"] }
 serde_json = { version = "1.0.133" }
 strum = { version = "0.26.3", features = ["derive"] }
 time = { version = "0.3.36", features = ["serde", "formatting", "parsing"] }
 uuid = { version = "1.11.0", features = ["serde"] }
+webpki-roots = "0.26.7"
 
 # Cryptography
 base64 = "0.22.1"
@@ -26,11 +20,18 @@ hmac = "0.12.1"
 sha2 = "0.10.8"
 
 # API
+fastwebsockets = { version = "0.8.0", features = ["upgrade"] }
 hyper = "1.5.1"
 hyper-util = "0.1.10"
 http-body-util = "0.1.2"
 reqwest = "0.12.9"
-fastwebsockets = { version = "0.8.0", features = ["upgrade"] }
+tokio = { version = "1.42.0", features = [
+    "rt-multi-thread",
+    "net",
+    "macros",
+    "parking_lot",
+] }
+tokio-rustls = "0.26.0"
 
 [dev-dependencies]
 dotenvy = "0.15.7"
