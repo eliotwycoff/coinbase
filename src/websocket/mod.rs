@@ -1,6 +1,6 @@
 use crate::{
     common::{authentication::Signer, types::ProductId, Error},
-    websocket::full::Message,
+    websocket::{level_three::Schema, types::FullMessage},
 };
 use base64::{prelude::BASE64_STANDARD, Engine};
 use fastwebsockets::{handshake, FragmentCollector, Frame, OpCode, Payload, Role, WebSocket};
@@ -13,6 +13,7 @@ use hyper::{
 };
 use hyper_util::rt::TokioIo;
 use rustls_pki_types::ServerName;
+use serde_json::Value;
 use std::{
     future::Future,
     sync::Arc,
@@ -24,7 +25,8 @@ use tokio_rustls::{
     TlsConnector,
 };
 
-pub mod full;
+pub mod level_three;
+pub mod types;
 
 #[derive(Debug)]
 pub struct Client {
@@ -107,6 +109,38 @@ impl Client {
             subscription_message.as_bytes(),
         )))
         .await?;
+
+        // Deserialize the incoming subscriptions message.
+        let frame = match ws.read_frame().await {
+            Ok(frame) => frame,
+            Err(error) => {
+                println!("Error => {error}");
+
+                ws.write_frame(Frame::close_raw(vec![].into())).await?;
+
+                return Err(Error::WebSocket(error));
+            }
+        };
+
+        let subscriptions = serde_json::from_slice::<Value>(frame.payload.as_ref())?;
+
+        println!("subscriptions => {subscriptions:?}");
+
+        // Deserialize the incoming schema.
+        let frame = match ws.read_frame().await {
+            Ok(frame) => frame,
+            Err(error) => {
+                println!("Error => {error}");
+
+                ws.write_frame(Frame::close_raw(vec![].into())).await?;
+
+                return Err(Error::WebSocket(error));
+            }
+        };
+
+        let schema = serde_json::from_slice::<Schema>(frame.payload.as_ref())?;
+
+        println!("schema => {schema:?}");
 
         // Loop through and deserialize the incoming messages.
         loop {

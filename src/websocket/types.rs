@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum Message<'ws> {
+pub enum FullMessage<'ws> {
     Received {
         #[serde(with = "time::serde::iso8601")]
         time: OffsetDateTime,
@@ -131,8 +131,8 @@ mod test {
     #[test]
     fn can_deserialize_received_message() {
         let json = r#"{"type":"received","time":"2014-11-07T08:19:27.028459Z","product_id":"BTC-USD","sequence":10,"order_id":"d50ec984-77a8-460a-b958-66f114b0de9b","size":"1.34","price":"502.1","side":"buy","order_type":"limit","client-oid":"d50ec974-76a2-454b-66f135b1ea8c"}"#;
-        let message: Message = serde_json::from_str(json).unwrap();
+        let full_message: FullMessage = serde_json::from_str(json).unwrap();
 
-        println!("message => {message:?}");
+        println!("full_message => {full_message:?}");
     }
 }
