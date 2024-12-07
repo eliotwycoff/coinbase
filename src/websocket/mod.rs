@@ -91,7 +91,6 @@ impl Client {
         let (mut ws, _) = handshake::client(&SpawnExecutor, request, tls_stream).await?;
 
         // Configure the connection.
-        println!("Configuring connection");
         ws.set_writev(false);
         ws.set_auto_close(true);
         ws.set_auto_pong(true);
