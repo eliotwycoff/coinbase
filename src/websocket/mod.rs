@@ -40,7 +40,7 @@ impl Client {
         })
     }
 
-    /// Connect to the endpoint and return a websocket connection.
+    /// Connect to the endpoint and stream order book data.
     pub async fn connect_and_subscribe(&self, product_id: ProductId) -> Result<(), Error> {
         // Create the subscription message.
         let product_id: &'static str = product_id.into();
