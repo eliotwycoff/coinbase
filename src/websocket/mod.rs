@@ -23,7 +23,6 @@ use tokio_rustls::{
 };
 
 pub mod level_three;
-pub mod types;
 
 #[derive(Debug)]
 pub struct Client {
@@ -61,8 +60,6 @@ impl Client {
             "timestamp": timestamp,
         }))?;
 
-        println!("subscription message => {subscription_message}");
-
         // Connect to the endpoint.
         let tcp_stream = TcpStream::connect("ws-direct.exchange.coinbase.com:443").await?;
 
@@ -91,7 +88,6 @@ impl Client {
             )
             .header("Sec-WebSocket-Version", "13")
             .body(Empty::<Bytes>::new())?;
-        println!("Creating websocket");
         let (mut ws, _) = handshake::client(&SpawnExecutor, request, tls_stream).await?;
 
         // Configure the connection.
@@ -101,7 +97,6 @@ impl Client {
         ws.set_auto_pong(true);
 
         // Send the subscription message.
-        println!("Sending subscription message");
         ws.write_frame(Frame::text(Payload::Borrowed(
             subscription_message.as_bytes(),
         )))
@@ -118,10 +113,7 @@ impl Client {
                 return Err(Error::WebSocket(error));
             }
         };
-
-        let subscriptions = serde_json::from_slice::<Value>(frame.payload.as_ref())?;
-
-        println!("subscriptions => {subscriptions:?}");
+        let _subscriptions = serde_json::from_slice::<Value>(frame.payload.as_ref())?;
 
         // Deserialize the incoming schema.
         let frame = match ws.read_frame().await {
@@ -134,11 +126,7 @@ impl Client {
                 return Err(Error::WebSocket(error));
             }
         };
-
-        let schema = serde_json::from_slice::<Schema>(frame.payload.as_ref())?;
-
-        println!("schema => {schema:?}");
-        println!("Reading frames!");
+        let _schema = serde_json::from_slice::<Schema>(frame.payload.as_ref())?;
 
         // Loop through and deserialize the incoming messages.
         loop {

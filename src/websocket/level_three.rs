@@ -1,4 +1,4 @@
-use crate::{common::types::ProductId, websocket::types::Side};
+use crate::common::types::{ProductId, Side};
 use bigdecimal::BigDecimal;
 use serde::{
     de::{self, Deserializer, SeqAccess, Visitor},
