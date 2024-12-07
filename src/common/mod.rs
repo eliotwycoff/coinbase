@@ -3,6 +3,7 @@ pub mod types;
 
 #[derive(Debug)]
 pub enum Error {
+    ParamRequired(&'static str),
     Base64(base64::DecodeError),
     Hmac(hmac::digest::InvalidLength),
     Io(std::io::Error),
@@ -11,6 +12,12 @@ pub enum Error {
     SystemTime(std::time::SystemTimeError),
     Json(serde_json::Error),
     DnsName(rustls_pki_types::InvalidDnsNameError),
+}
+
+impl Error {
+    pub fn param_required(name: &'static str) -> Self {
+        Self::ParamRequired(name)
+    }
 }
 
 impl From<base64::DecodeError> for Error {
@@ -64,6 +71,7 @@ impl From<rustls_pki_types::InvalidDnsNameError> for Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::ParamRequired(name) => write!(f, "Param required => {name}"),
             Self::Base64(error) => write!(f, "Base64 error => {error}"),
             Self::Hmac(error) => write!(f, "Hmac invalid key length => {error}"),
             Self::Io(error) => write!(f, "Io error => {error}"),
@@ -75,3 +83,5 @@ impl std::fmt::Display for Error {
         }
     }
 }
+
+impl std::error::Error for Error {}

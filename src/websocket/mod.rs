@@ -2,13 +2,15 @@ use crate::{
     common::{authentication::Signer, types::ProductId, Error},
     websocket::level_three::{Message, Schema},
 };
-use fastwebsockets::{handshake, Frame, Payload};
+use fastwebsockets::{handshake, Frame, Payload, WebSocket};
 use http_body_util::Empty;
 use hyper::{
     body::Bytes,
     header::{CONNECTION, UPGRADE},
+    upgrade::Upgraded,
     Request,
 };
+use hyper_util::rt::TokioIo;
 use rustls_pki_types::ServerName;
 use serde_json::Value;
 use std::{
@@ -24,44 +26,109 @@ use tokio_rustls::{
 
 pub mod level_three;
 
-#[derive(Debug)]
-pub struct Client {
-    key: String,
-    signer: Signer,
-    passphrase: String,
+pub struct Channel {
+    subscriptions: Value,
+    schema: Schema,
+    ws: WebSocket<TokioIo<Upgraded>>,
 }
 
-impl Client {
-    pub fn new(key: String, secret: String, passphrase: String) -> Result<Self, Error> {
-        Ok(Self {
-            key,
-            signer: Signer::try_from(secret.as_str())?,
-            passphrase,
-        })
+impl Channel {
+    pub fn subscriptions(&self) -> &Value {
+        &self.subscriptions
+    }
+
+    pub fn schema(&self) -> &Schema {
+        &self.schema
+    }
+
+    pub async fn next(&mut self) -> Result<Message, Error> {
+        match self.ws.read_frame().await {
+            Ok(frame) => Ok(serde_json::from_slice(frame.payload.as_ref())?),
+            Err(error) => {
+                self.ws.write_frame(Frame::close_raw(vec![].into())).await?;
+
+                Err(Error::WebSocket(error))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ChannelBuilder {
+    key: Option<String>,
+    signer: Option<Signer>,
+    passphrase: Option<String>,
+    product_ids: Vec<ProductId>,
+    domain: Option<String>,
+    port: Option<u16>,
+}
+
+impl ChannelBuilder {
+    pub fn with_authentication(
+        mut self,
+        key: String,
+        secret: String,
+        passphrase: String,
+    ) -> Result<Self, Error> {
+        self.key = Some(key);
+        self.signer = Some(Signer::try_from(secret.as_str())?);
+        self.passphrase = Some(passphrase);
+
+        Ok(self)
+    }
+
+    pub fn with_product_id(mut self, product_id: ProductId) -> Self {
+        self.product_ids.push(product_id);
+
+        self
+    }
+
+    pub fn with_endpoint(mut self, domain: impl Into<String>, port: u16) -> Self {
+        self.domain = Some(domain.into());
+        self.port = Some(port);
+
+        self
     }
 
     /// Connect to the endpoint and stream order book data.
-    pub async fn connect_and_subscribe(&self, product_id: ProductId) -> Result<(), Error> {
+    pub async fn connect(self) -> Result<Channel, Error> {
         // Create the subscription message.
-        let product_id: &'static str = product_id.into();
+        let product_ids = self
+            .product_ids
+            .iter()
+            .map(|product_id| product_id.into())
+            .collect::<Vec<&'static str>>();
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)?
             .as_secs()
             .to_string();
-        let signature =
-            self.signer
-                .get_cb_access_sign(timestamp.as_str(), "/users/self/verify", "", "GET")?;
+        let key = self
+            .key
+            .ok_or_else(|| Error::param_required("authentication key"))?;
+        let signature = self
+            .signer
+            .ok_or_else(|| Error::param_required("authentication secret"))?
+            .get_cb_access_sign(timestamp.as_str(), "/users/self/verify", "", "GET")?;
+        let passphrase = self
+            .passphrase
+            .ok_or_else(|| Error::param_required("authentication passphrase"))?;
         let subscription_message = serde_json::to_string(&serde_json::json!({
             "type": "subscribe",
-            "channels": [{ "name": "level3", "product_ids": [product_id] }],
+            "channels": [{ "name": "level3", "product_ids": product_ids }],
             "signature": signature,
-            "key": self.key,
-            "passphrase": self.passphrase,
+            "key": key,
+            "passphrase": passphrase,
             "timestamp": timestamp,
         }))?;
 
         // Connect to the endpoint.
-        let tcp_stream = TcpStream::connect("ws-direct.exchange.coinbase.com:443").await?;
+        let domain = self
+            .domain
+            .ok_or_else(|| Error::param_required("endpoint domain"))?;
+        let port = self
+            .port
+            .ok_or_else(|| Error::param_required("endpoint port"))?;
+        let tcp_stream = TcpStream::connect(format!("{domain}:{port}")).await?;
 
         // Upgrade to TLS.
         let mut root_cert_store = RootCertStore::empty();
@@ -72,14 +139,14 @@ impl Client {
             .with_root_certificates(root_cert_store)
             .with_no_client_auth();
         let tls_connector = TlsConnector::from(Arc::new(tls_config));
-        let tls_domain = ServerName::try_from("ws-direct.exchange.coinbase.com")?;
+        let tls_domain = ServerName::try_from(domain.clone())?;
         let tls_stream = tls_connector.connect(tls_domain, tcp_stream).await?;
 
         // Upgrade to WSS.
         let request = Request::builder()
             .method("GET")
-            .uri(format!("https://ws-direct.exchange.coinbase.com/"))
-            .header("HOST", "ws-direct.exchange.coinbase.com")
+            .uri(format!("https://{domain}/"))
+            .header("HOST", domain.as_str())
             .header(UPGRADE, "websocket")
             .header(CONNECTION, "upgrade")
             .header(
@@ -110,7 +177,7 @@ impl Client {
                 return Err(Error::WebSocket(error));
             }
         };
-        let _subscriptions = serde_json::from_slice::<Value>(frame.payload.as_ref())?;
+        let subscriptions = serde_json::from_slice::<Value>(frame.payload.as_ref())?;
 
         // Deserialize the incoming schema.
         let frame = match ws.read_frame().await {
@@ -121,28 +188,13 @@ impl Client {
                 return Err(Error::WebSocket(error));
             }
         };
-        let _schema = serde_json::from_slice::<Schema>(frame.payload.as_ref())?;
+        let schema = serde_json::from_slice::<Schema>(frame.payload.as_ref())?;
 
-        // Loop through and deserialize the incoming messages.
-        loop {
-            let frame = match ws.read_frame().await {
-                Ok(frame) => frame,
-                Err(error) => {
-                    println!("Error => {error}");
-
-                    ws.write_frame(Frame::close_raw(vec![].into())).await?;
-
-                    break;
-                }
-            };
-
-            println!(
-                "{}",
-                serde_json::from_slice::<Message>(frame.payload.as_ref()).unwrap()
-            );
-        }
-
-        Ok(())
+        Ok(Channel {
+            subscriptions,
+            schema,
+            ws,
+        })
     }
 }
 
@@ -163,21 +215,27 @@ mod test {
     use super::*;
 
     #[tokio::test]
-    async fn can_receive_messages() {
-        dotenvy::from_filename(".env").unwrap();
+    async fn can_receive_messages() -> Result<(), Box<dyn std::error::Error>> {
+        dotenvy::from_filename(".env")?;
 
         // Load the credentials.
-        let key = std::env::var("CB_ACCESS_KEY").unwrap();
-        let secret = std::env::var("CB_ACCESS_SECRET").unwrap();
-        let passphrase = std::env::var("CB_ACCESS_PASSPHRASE").unwrap();
+        let key = std::env::var("CB_ACCESS_KEY")?;
+        let secret = std::env::var("CB_ACCESS_SECRET")?;
+        let passphrase = std::env::var("CB_ACCESS_PASSPHRASE")?;
 
-        // Set up the client.
-        let client = Client::new(key, secret, passphrase).unwrap();
+        // Set up the channel.
+        let mut channel = ChannelBuilder::default()
+            .with_authentication(key, secret, passphrase)?
+            .with_endpoint("ws-direct.exchange.coinbase.com", 443)
+            .with_product_id(ProductId::BtcUsd)
+            .connect()
+            .await?;
 
-        // Connect to a pair.
-        client
-            .connect_and_subscribe(ProductId::BtcUsd)
-            .await
-            .unwrap();
+        // Receive messages in a loop.
+        while let Ok(message) = channel.next().await {
+            println!("{message}");
+        }
+
+        Ok(())
     }
 }
