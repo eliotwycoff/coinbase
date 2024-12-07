@@ -1,6 +1,9 @@
 use crate::{
     common::{authentication::Signer, types::ProductId, Error},
-    websocket::{level_three::Schema, types::FullMessage},
+    websocket::{
+        level_three::{Message, Schema},
+        types::FullMessage,
+    },
 };
 use base64::{prelude::BASE64_STANDARD, Engine};
 use fastwebsockets::{handshake, FragmentCollector, Frame, OpCode, Payload, Role, WebSocket};
@@ -141,10 +144,10 @@ impl Client {
         let schema = serde_json::from_slice::<Schema>(frame.payload.as_ref())?;
 
         println!("schema => {schema:?}");
+        println!("Reading frames!");
 
         // Loop through and deserialize the incoming messages.
         loop {
-            println!("Reading frame!");
             let frame = match ws.read_frame().await {
                 Ok(frame) => frame,
                 Err(error) => {
@@ -157,13 +160,9 @@ impl Client {
             };
 
             println!(
-                "frame => {}",
-                std::str::from_utf8(frame.payload.as_ref()).unwrap()
+                "{}",
+                serde_json::from_slice::<Message>(frame.payload.as_ref()).unwrap()
             );
-
-            // let message = serde_json::from_slice::<Message>(&frame.payload.as_ref())?;
-
-            // println!("message => {message:?}");
         }
 
         Ok(())

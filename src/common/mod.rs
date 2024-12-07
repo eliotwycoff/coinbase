@@ -11,6 +11,7 @@ pub enum Error {
     SystemTime(std::time::SystemTimeError),
     Json(serde_json::Error),
     DnsName(rustls_pki_types::InvalidDnsNameError),
+    Parse(ParseError),
 }
 
 impl From<base64::DecodeError> for Error {
@@ -61,6 +62,12 @@ impl From<rustls_pki_types::InvalidDnsNameError> for Error {
     }
 }
 
+impl From<ParseError> for Error {
+    fn from(error: ParseError) -> Self {
+        Self::Parse(error)
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -72,8 +79,24 @@ impl std::fmt::Display for Error {
             Self::SystemTime(error) => write!(f, "System time error => {error}"),
             Self::Json(error) => write!(f, "Json error => {error}"),
             Self::DnsName(error) => write!(f, "Dns name error => {error}"),
+            Self::Parse(error) => write!(f, "Parse error => {error}"),
         }
     }
 }
 
 impl std::error::Error for Error {}
+
+#[derive(Debug)]
+pub enum ParseError {
+    EndOfFile,
+    InvalidField(usize),
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EndOfFile => write!(f, "End of file"),
+            Self::InvalidField(index) => write!(f, "Invalid field at position {index}"),
+        }
+    }
+}
