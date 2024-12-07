@@ -3,6 +3,7 @@ pub mod types;
 
 #[derive(Debug)]
 pub enum Error {
+    ChannelClosed,
     ParamRequired(&'static str),
     Base64(base64::DecodeError),
     Hmac(hmac::digest::InvalidLength),
@@ -12,6 +13,7 @@ pub enum Error {
     SystemTime(std::time::SystemTimeError),
     Json(serde_json::Error),
     DnsName(rustls_pki_types::InvalidDnsNameError),
+    JoinError(tokio::task::JoinError),
 }
 
 impl Error {
@@ -68,9 +70,16 @@ impl From<rustls_pki_types::InvalidDnsNameError> for Error {
     }
 }
 
+impl From<tokio::task::JoinError> for Error {
+    fn from(error: tokio::task::JoinError) -> Self {
+        Self::JoinError(error)
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::ChannelClosed => write!(f, "Channel closed"),
             Self::ParamRequired(name) => write!(f, "Param required => {name}"),
             Self::Base64(error) => write!(f, "Base64 error => {error}"),
             Self::Hmac(error) => write!(f, "Hmac invalid key length => {error}"),
@@ -80,6 +89,7 @@ impl std::fmt::Display for Error {
             Self::SystemTime(error) => write!(f, "System time error => {error}"),
             Self::Json(error) => write!(f, "Json error => {error}"),
             Self::DnsName(error) => write!(f, "Dns name error => {error}"),
+            Self::JoinError(error) => write!(f, "Join error => {error}"),
         }
     }
 }

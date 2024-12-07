@@ -12,25 +12,25 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Schema {
+pub struct Schema<'ws> {
     #[serde(rename = "type")]
-    _type: String,
-    #[serde(rename = "schema")]
-    _schema: InnerSchema,
+    _type: &'ws str,
+    #[serde(rename = "schema", borrow)]
+    _schema: InnerSchema<'ws>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct InnerSchema {
-    #[serde(rename = "change")]
-    _change: [String; 7],
+pub struct InnerSchema<'ws> {
+    #[serde(rename = "change", borrow)]
+    _change: [&'ws str; 7],
     #[serde(rename = "done")]
-    _done: [String; 5],
+    _done: [&'ws str; 5],
     #[serde(rename = "match")]
-    _match: [String; 8],
+    _match: [&'ws str; 8],
     #[serde(rename = "noop")]
-    _noop: [String; 4],
+    _noop: [&'ws str; 4],
     #[serde(rename = "open")]
-    _open: [String; 8],
+    _open: [&'ws str; 8],
 }
 
 #[derive(Debug)]
@@ -289,46 +289,6 @@ mod test {
         let schema = serde_json::from_str::<Schema>(input).unwrap();
 
         println!("schema => {schema:?}");
-
-        // assert!(matches!(
-        //     serde_json::from_str::<Schema>(input).unwrap(),
-        //     Schema {
-        //         _type: "level3",
-        //         _schema: InnerSchema {
-        //             _change: [
-        //                 "type",
-        //                 "product_id",
-        //                 "sequence",
-        //                 "order_id",
-        //                 "price",
-        //                 "size",
-        //                 "time"
-        //             ],
-        //             _done: ["type", "product_id", "sequence", "order_id", "time"],
-        //             _match: [
-        //                 "type",
-        //                 "product_id",
-        //                 "sequence",
-        //                 "maker_order_id",
-        //                 "taker_order_id",
-        //                 "price",
-        //                 "size",
-        //                 "time"
-        //             ],
-        //             _noop: ["type", "product_id", "sequence", "time"],
-        //             _open: [
-        //                 "type",
-        //                 "product_id",
-        //                 "sequence",
-        //                 "order_id",
-        //                 "side",
-        //                 "price",
-        //                 "size",
-        //                 "time"
-        //             ]
-        //         },
-        //     },
-        // ));
     }
 
     #[test]
