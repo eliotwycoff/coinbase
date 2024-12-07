@@ -181,7 +181,7 @@ mod test {
 
         // Connect to a pair.
         client
-            .connect_and_subscribe(ProductId::KsmUsd)
+            .connect_and_subscribe(ProductId::BtcUsd)
             .await
             .unwrap();
     }
