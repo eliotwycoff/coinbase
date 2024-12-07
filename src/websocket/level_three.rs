@@ -286,9 +286,46 @@ mod test {
     #[test]
     fn can_deserialize_schema() {
         let input = r#"{"type":"level3","schema":{"change":["type","product_id","sequence","order_id","price","size","time"],"done":["type","product_id","sequence","order_id","time"],"match":["type","product_id","sequence","maker_order_id","taker_order_id","price","size","time"],"noop":["type","product_id","sequence","time"],"open":["type","product_id","sequence","order_id","side","price","size","time"]}}"#;
-        let schema: Schema = serde_json::from_str(input).unwrap();
 
-        println!("schema => {schema:?}");
+        assert!(matches!(
+            serde_json::from_str::<Schema>(input).unwrap(),
+            Schema {
+                _type: "level3",
+                _schema: InnerSchema {
+                    _change: [
+                        "type",
+                        "product_id",
+                        "sequence",
+                        "order_id",
+                        "price",
+                        "size",
+                        "time"
+                    ],
+                    _done: ["type", "product_id", "sequence", "order_id", "time"],
+                    _match: [
+                        "type",
+                        "product_id",
+                        "sequence",
+                        "maker_order_id",
+                        "taker_order_id",
+                        "price",
+                        "size",
+                        "time"
+                    ],
+                    _noop: ["type", "product_id", "sequence", "time"],
+                    _open: [
+                        "type",
+                        "product_id",
+                        "sequence",
+                        "order_id",
+                        "side",
+                        "price",
+                        "size",
+                        "time"
+                    ]
+                },
+            },
+        ));
     }
 
     #[test]

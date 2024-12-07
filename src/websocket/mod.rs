@@ -1,20 +1,14 @@
 use crate::{
     common::{authentication::Signer, types::ProductId, Error},
-    websocket::{
-        level_three::{Message, Schema},
-        types::FullMessage,
-    },
+    websocket::level_three::{Message, Schema},
 };
-use base64::{prelude::BASE64_STANDARD, Engine};
-use fastwebsockets::{handshake, FragmentCollector, Frame, OpCode, Payload, Role, WebSocket};
+use fastwebsockets::{handshake, Frame, Payload};
 use http_body_util::Empty;
 use hyper::{
     body::Bytes,
     header::{CONNECTION, UPGRADE},
-    upgrade::Upgraded,
     Request,
 };
-use hyper_util::rt::TokioIo;
 use rustls_pki_types::ServerName;
 use serde_json::Value;
 use std::{
@@ -48,7 +42,7 @@ impl Client {
     }
 
     /// Connect to the endpoint and return a websocket connection.
-    async fn connect_and_subscribe(&self, product_id: ProductId) -> Result<(), Error> {
+    pub async fn connect_and_subscribe(&self, product_id: ProductId) -> Result<(), Error> {
         // Create the subscription message.
         let product_id: &'static str = product_id.into();
         let timestamp = SystemTime::now()
