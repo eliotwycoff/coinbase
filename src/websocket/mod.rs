@@ -105,8 +105,6 @@ impl Client {
         let frame = match ws.read_frame().await {
             Ok(frame) => frame,
             Err(error) => {
-                println!("Error => {error}");
-
                 ws.write_frame(Frame::close_raw(vec![].into())).await?;
 
                 return Err(Error::WebSocket(error));
@@ -118,8 +116,6 @@ impl Client {
         let frame = match ws.read_frame().await {
             Ok(frame) => frame,
             Err(error) => {
-                println!("Error => {error}");
-
                 ws.write_frame(Frame::close_raw(vec![].into())).await?;
 
                 return Err(Error::WebSocket(error));
