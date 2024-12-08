@@ -13,7 +13,8 @@ pub enum Error {
     SystemTime(std::time::SystemTimeError),
     Json(serde_json::Error),
     DnsName(rustls_pki_types::InvalidDnsNameError),
-    JoinError(tokio::task::JoinError),
+    Join(tokio::task::JoinError),
+    Semaphore(tokio::sync::AcquireError),
 }
 
 impl Error {
@@ -72,7 +73,13 @@ impl From<rustls_pki_types::InvalidDnsNameError> for Error {
 
 impl From<tokio::task::JoinError> for Error {
     fn from(error: tokio::task::JoinError) -> Self {
-        Self::JoinError(error)
+        Self::Join(error)
+    }
+}
+
+impl From<tokio::sync::AcquireError> for Error {
+    fn from(error: tokio::sync::AcquireError) -> Self {
+        Self::Semaphore(error)
     }
 }
 
@@ -89,7 +96,8 @@ impl std::fmt::Display for Error {
             Self::SystemTime(error) => write!(f, "System time error => {error}"),
             Self::Json(error) => write!(f, "Json error => {error}"),
             Self::DnsName(error) => write!(f, "Dns name error => {error}"),
-            Self::JoinError(error) => write!(f, "Join error => {error}"),
+            Self::Join(error) => write!(f, "Join error => {error}"),
+            Self::Semaphore(error) => write!(f, "Semaphore error => {error}"),
         }
     }
 }

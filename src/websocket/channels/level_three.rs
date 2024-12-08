@@ -1,8 +1,11 @@
-use crate::common::types::{ProductId, Side};
+use crate::{
+    common::types::{ProductId, Side},
+    websocket::channels::ChannelType,
+};
 use bigdecimal::BigDecimal;
 use serde::{
     de::{self, Deserializer, SeqAccess, Visitor},
-    Deserialize, Serialize,
+    Deserialize,
 };
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
@@ -10,28 +13,6 @@ use std::{
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Schema<'ws> {
-    #[serde(rename = "type")]
-    _type: &'ws str,
-    #[serde(rename = "schema", borrow)]
-    _schema: InnerSchema<'ws>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct InnerSchema<'ws> {
-    #[serde(rename = "change", borrow)]
-    _change: [&'ws str; 7],
-    #[serde(rename = "done")]
-    _done: [&'ws str; 5],
-    #[serde(rename = "match")]
-    _match: [&'ws str; 8],
-    #[serde(rename = "noop")]
-    _noop: [&'ws str; 4],
-    #[serde(rename = "open")]
-    _open: [&'ws str; 8],
-}
 
 #[derive(Debug)]
 pub enum Message {
@@ -72,6 +53,16 @@ pub enum Message {
         size: BigDecimal,
         time: OffsetDateTime,
     },
+}
+
+impl ChannelType for Message {
+    fn channel_type() -> &'static str {
+        "level3"
+    }
+
+    fn parse_schema() -> bool {
+        true
+    }
 }
 
 impl Display for Message {
@@ -282,14 +273,6 @@ impl<'de> Deserialize<'de> for Message {
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn can_deserialize_schema() {
-        let input = r#"{"type":"level3","schema":{"change":["type","product_id","sequence","order_id","price","size","time"],"done":["type","product_id","sequence","order_id","time"],"match":["type","product_id","sequence","maker_order_id","taker_order_id","price","size","time"],"noop":["type","product_id","sequence","time"],"open":["type","product_id","sequence","order_id","side","price","size","time"]}}"#;
-        let schema = serde_json::from_str::<Schema>(input).unwrap();
-
-        println!("schema => {schema:?}");
-    }
 
     #[test]
     fn can_deserialize_change_message() {
