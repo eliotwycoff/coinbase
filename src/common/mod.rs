@@ -11,6 +11,7 @@ pub enum Error {
     Io(std::io::Error),
     Http(hyper::http::Error),
     WebSocket(fastwebsockets::WebSocketError),
+    Reqwest(reqwest::Error),
     SystemTime(std::time::SystemTimeError),
     Json(serde_json::Error),
     DnsName(rustls_pki_types::InvalidDnsNameError),
@@ -54,6 +55,12 @@ impl From<fastwebsockets::WebSocketError> for Error {
     }
 }
 
+impl From<reqwest::Error> for Error {
+    fn from(error: reqwest::Error) -> Self {
+        Self::Reqwest(error)
+    }
+}
+
 impl From<std::time::SystemTimeError> for Error {
     fn from(error: std::time::SystemTimeError) -> Self {
         Self::SystemTime(error)
@@ -94,6 +101,7 @@ impl std::fmt::Display for Error {
             Self::Io(error) => write!(f, "Io error => {error}"),
             Self::Http(error) => write!(f, "Http error => {error}"),
             Self::WebSocket(error) => write!(f, "WebSocket error => {error}"),
+            Self::Reqwest(error) => write!(f, "Reqwest error => {error}"),
             Self::SystemTime(error) => write!(f, "System time error => {error}"),
             Self::Json(error) => write!(f, "Json error => {error}"),
             Self::DnsName(error) => write!(f, "Dns name error => {error}"),
