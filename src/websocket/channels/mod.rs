@@ -1,4 +1,4 @@
-use crate::common::{authentication::Signer, types::ProductId, Error};
+use crate::common::{authentication::Signer, rate_limit::TokenBucket, types::ProductId, Error};
 use fastwebsockets::{handshake, Frame, Payload, WebSocket};
 use http_body_util::Empty;
 use hyper::{
@@ -40,12 +40,36 @@ where
 {
     ws: WebSocket<TokioIo<Upgraded>>,
     cache: Option<Vec<T>>,
+    token_bucket: TokenBucket,
 }
 
 impl<T> Channel<T>
 where
     T: 'static + DeserializeOwned + Send,
 {
+    /// Send a frame (message) to the host, respecting rate limits.
+    async fn write_frame<'f>(&mut self, frame: Frame<'f>) -> Result<(), Error> {
+        // Get a permit (token) to send this frame.
+        let token = self.token_bucket.get_token().await?;
+
+        // Send the frame and return the token.
+        self.ws.write_frame(frame).await?;
+        self.token_bucket.return_token(token).await
+    }
+
+    /// Read a frame (message) from the host, closing the connection on error.
+    async fn read_frame(&mut self) -> Result<Frame, Error> {
+        match self.ws.read_frame().await {
+            Ok(frame) => Ok(frame),
+            Err(error) => {
+                self.close().await?;
+
+                Err(Error::WebSocket(error))
+            }
+        }
+    }
+
+    /// Get the next `T` message from the host.
     pub async fn next(&mut self) -> Result<T, Error> {
         match self.ws.read_frame().await {
             Ok(frame) => Ok(serde_json::from_slice::<T>(frame.payload.as_ref())?),
@@ -57,13 +81,14 @@ where
         }
     }
 
+    /// Close this WebSocket connection.
     pub async fn close(&mut self) -> Result<(), Error> {
-        self.ws
-            .write_frame(Frame::close_raw(vec![].into()))
-            .await
-            .map_err(|error| error.into())
+        self.write_frame(Frame::close_raw(vec![].into())).await
     }
 
+    /// Cache incoming `T` messages. Note that this function returns a `CachingChannel`,
+    /// i.e. a handle to a `Channel` in caching mode. To stop caching and retrieve
+    /// the original `Channel`, call `.join()` on the `CachingChannel`.
     pub async fn cache(mut self) -> CachingChannel<T> {
         let (tx, mut rx) = oneshot::channel();
         let join_handle = tokio::spawn(async move {
@@ -83,6 +108,7 @@ where
         CachingChannel { tx, join_handle }
     }
 
+    /// Get an iterator over all cached `T` messages.
     pub fn cached_items(&mut self) -> IntoIter<T> {
         self.cache.take().unwrap_or_else(|| vec![]).into_iter()
     }
@@ -117,6 +143,7 @@ pub struct ChannelBuilder {
     product_ids: Vec<ProductId>,
     domain: Option<String>,
     port: Option<u16>,
+    token_bucket: Option<TokenBucket>,
 }
 
 impl ChannelBuilder {
@@ -142,6 +169,12 @@ impl ChannelBuilder {
     pub fn with_endpoint(mut self, domain: impl Into<String>, port: u16) -> Self {
         self.domain = Some(domain.into());
         self.port = Some(port);
+
+        self
+    }
+
+    pub fn with_token_bucket(mut self, token_bucket: TokenBucket) -> Self {
+        self.token_bucket = Some(token_bucket);
 
         self
     }
@@ -221,37 +254,31 @@ impl ChannelBuilder {
         ws.set_auto_close(true);
         ws.set_auto_pong(true);
 
+        // Set up the channel object.
+        let mut channel = Channel {
+            ws,
+            cache: None,
+            token_bucket: self
+                .token_bucket
+                .ok_or_else(|| Error::param_required("token bucket"))?,
+        };
+
         // Send the subscription message.
-        ws.write_frame(Frame::text(Payload::Borrowed(
-            subscription_message.as_bytes(),
-        )))
-        .await?;
+        channel
+            .write_frame(Frame::text(Payload::Borrowed(
+                subscription_message.as_bytes(),
+            )))
+            .await?;
 
         // Deserialize the incoming subscriptions message.
-        let frame = match ws.read_frame().await {
-            Ok(frame) => frame,
-            Err(error) => {
-                ws.write_frame(Frame::close_raw(vec![].into())).await?;
-
-                return Err(Error::WebSocket(error));
-            }
-        };
-        let _subscriptions = serde_json::from_slice::<Value>(frame.payload.as_ref())?;
+        let _ = serde_json::from_slice::<Value>(channel.read_frame().await?.payload.as_ref())?;
 
         if T::parse_schema() {
-            // Deserialize the incoming schema.
-            let frame = match ws.read_frame().await {
-                Ok(frame) => frame,
-                Err(error) => {
-                    ws.write_frame(Frame::close_raw(vec![].into())).await?;
-
-                    return Err(Error::WebSocket(error));
-                }
-            };
-            let _schema = serde_json::from_slice::<Value>(frame.payload.as_ref())?;
+            // Deserialize the incoming schema message.
+            let _ = serde_json::from_slice::<Value>(channel.read_frame().await?.payload.as_ref())?;
         }
 
-        Ok(Channel { ws, cache: None })
+        Ok(channel)
     }
 }
 
@@ -287,6 +314,7 @@ mod test {
             .with_authentication(key, secret, passphrase)?
             .with_endpoint("ws-direct.exchange.coinbase.com", 443)
             .with_product_id(ProductId::BtcUsd)
+            .with_token_bucket(TokenBucket::new(1_000, Duration::from_millis(100)))
             .connect::<Message>()
             .await?;
 
@@ -312,6 +340,7 @@ mod test {
             .with_authentication(key, secret, passphrase)?
             .with_endpoint("ws-direct.exchange.coinbase.com", 443)
             .with_product_id(ProductId::BtcUsd)
+            .with_token_bucket(TokenBucket::new(1_000, Duration::from_millis(100)))
             .connect::<Message>()
             .await?;
 
