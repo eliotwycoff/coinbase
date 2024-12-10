@@ -9,6 +9,7 @@ bigdecimal = { version = "0.4.7", features = ["serde-json"] }
 rustls-pki-types = "1.10.0"
 serde = { version = "1.0.215", features = ["derive"] }
 serde_json = { version = "1.0.133" }
+smartstring = { version = "1.0.1", features = ["serde"] }
 strum = { version = "0.26.3", features = ["derive"] }
 time = { version = "0.3.37", features = ["serde", "formatting", "parsing"] }
 uuid = { version = "1.11.0", features = ["serde"] }
@@ -35,3 +36,4 @@ tokio-rustls = "0.26.1"
 
 [dev-dependencies]
 dotenvy = "0.15.7"
+convert_case = "0.6.0"
