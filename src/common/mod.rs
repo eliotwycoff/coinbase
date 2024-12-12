@@ -17,11 +17,16 @@ pub enum Error {
     DnsName(rustls_pki_types::InvalidDnsNameError),
     Join(tokio::task::JoinError),
     Semaphore(tokio::sync::AcquireError),
+    Number(&'static str),
 }
 
 impl Error {
     pub fn param_required(name: &'static str) -> Self {
         Self::ParamRequired(name)
+    }
+
+    pub fn number(details: &'static str) -> Self {
+        Self::Number(details)
     }
 }
 
@@ -107,6 +112,7 @@ impl std::fmt::Display for Error {
             Self::DnsName(error) => write!(f, "Dns name error => {error}"),
             Self::Join(error) => write!(f, "Join error => {error}"),
             Self::Semaphore(error) => write!(f, "Semaphore error => {error}"),
+            Self::Number(details) => write!(f, "Number error => {details}"),
         }
     }
 }

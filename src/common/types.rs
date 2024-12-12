@@ -1,95 +1,41 @@
-use bigdecimal::{BigDecimal, Num};
+use crate::common::Error;
 use serde::{
     de::{self, Deserializer, Visitor},
-    Deserialize, Serialize,
+    Deserialize,
 };
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use strum::IntoStaticStr;
-use uuid::Uuid;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub enum CancelReason {
-    #[serde(rename = "101")]
-    TimeInForce,
-    #[serde(rename = "102")]
-    SelfTradePrevention,
-    #[serde(rename = "103")]
-    Admin,
-    #[serde(rename = "104")]
-    PriceBoundOrderProtection,
-    #[serde(rename = "105")]
-    InsufficientFunds,
-    #[serde(rename = "106")]
-    InsufficientLiquidity,
-    #[serde(rename = "107")]
-    Broker,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum OrderType {
-    Market,
-    Limit,
-}
-
-#[derive(Debug, Serialize, Deserialize, IntoStaticStr)]
-pub enum ProductId {
-    #[serde(rename = "BTC-USD")]
-    #[strum(serialize = "BTC-USD")]
-    BtcUsd,
-    #[serde(rename = "ETH-USD")]
-    #[strum(serialize = "ETH-USD")]
-    EtcUsd,
-    #[serde(rename = "KSM-USD")]
-    #[strum(serialize = "KSM-USD")]
-    KsmUsd,
-}
-
-impl Display for ProductId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        let ticker: &'static str = self.into();
-
-        write!(f, "{ticker}")
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Reason {
-    Filled,
-    Canceled,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Side {
-    Buy,
-    Sell,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum UserId<'ws> {
-    Taker {
-        taker_user_id: &'ws str,
-        user_id: &'ws str,
-        taker_profile_id: Uuid,
-        profile_id: Uuid,
-        taker_fee_rate: BigDecimal,
-    },
-    Maker {
-        maker_user_id: &'ws str,
-        user_id: &'ws str,
-        maker_profile_id: Uuid,
-        profile_id: Uuid,
-        maker_fee_rate: BigDecimal,
-    },
-}
 
 #[derive(Debug)]
 pub struct Number {
     value: u64,
-    power: usize,
+    decimals: usize,
+}
+
+impl Number {
+    pub fn normalize(self, decimals: usize) -> Result<u64, Error> {
+        let scale: u64 = match decimals - self.decimals {
+            0 => 1,
+            1 => 10,
+            2 => 100,
+            3 => 1_000,
+            4 => 10_000,
+            5 => 100_000,
+            6 => 1_000_000,
+            7 => 10_000_000,
+            8 => 100_000_000,
+            9 => 1_000_000_000,
+            10 => 10_000_000_000,
+            11 => 100_000_000_000,
+            12 => 1_000_000_000_000,
+            d if d > 0 => return Err(Error::number("cannot normalize past 12 digits")),
+            _ => return Err(Error::number("cannot normalize to fewer decimals")),
+        };
+
+        Ok(self
+            .value
+            .checked_mul(scale)
+            .ok_or_else(|| Error::number("normalization overflow"))?)
+    }
 }
 
 impl<'de> Deserialize<'de> for Number {
@@ -118,7 +64,7 @@ impl<'de> Deserialize<'de> for Number {
                     .map_err(|_| {
                         de::Error::custom("failed to parse integer component of number")
                     })?;
-                let (power, rhs) = match split.next() {
+                let (decimals, rhs) = match split.next() {
                     Some(str) => (
                         str.len(),
                         str.parse::<u64>().map_err(|_| {
@@ -127,7 +73,7 @@ impl<'de> Deserialize<'de> for Number {
                     ),
                     None => (0, 0),
                 };
-                let scale: u64 = match power {
+                let scale: u64 = match decimals {
                     0 => 1,
                     1 => 10,
                     2 => 100,
@@ -141,7 +87,7 @@ impl<'de> Deserialize<'de> for Number {
                     10 => 10_000_000_000,
                     11 => 100_000_000_000,
                     12 => 1_000_000_000_000,
-                    _ => return Err(de::Error::custom("power must be in range 0-12")),
+                    _ => return Err(de::Error::custom("decimals must be in range 0-12")),
                 };
                 let value = lhs
                     .checked_mul(scale)
@@ -149,7 +95,7 @@ impl<'de> Deserialize<'de> for Number {
                     .checked_add(rhs)
                     .ok_or_else(|| de::Error::custom("number overflow"))?;
 
-                Ok(Number { value, power })
+                Ok(Number { value, decimals })
             }
         }
 
@@ -164,7 +110,7 @@ impl Display for Number {
         let mut n = 0;
 
         for (i, j) in (0..21).rev().enumerate() {
-            if i == self.power && self.power != 0 {
+            if i == self.decimals && self.decimals != 0 {
                 buffer[j] = b'.';
             } else {
                 buffer[j] = (value % 10) as u8 + b'0';
@@ -190,24 +136,12 @@ mod test {
     use super::*;
 
     #[test]
-    fn can_deserialize_product_id() {
-        let json = r#""KSM-USD""#;
-        let product_id = serde_json::from_slice::<ProductId>(json.as_bytes()).unwrap();
-
-        println!("product_id => {product_id:?}");
-
-        let sequence = serde_json::from_slice::<u64>(b"1074685508").unwrap();
-
-        println!("sequence => {sequence}");
-    }
-
-    #[test]
     fn can_deserialize_number_without_decimal() {
         assert!(matches!(
             serde_json::from_slice::<Number>(r#""69""#.as_bytes()).unwrap(),
             Number {
                 value: 69,
-                power: 0,
+                decimals: 0,
             }
         ))
     }
@@ -218,7 +152,7 @@ mod test {
             serde_json::from_slice::<Number>(r#""69.42""#.as_bytes()).unwrap(),
             Number {
                 value: 6942,
-                power: 2,
+                decimals: 2,
             }
         ))
     }
@@ -227,7 +161,7 @@ mod test {
     fn can_display_number_without_decimal() {
         let number = Number {
             value: 69,
-            power: 0,
+            decimals: 0,
         };
 
         assert_eq!(format!("{number}"), String::from("69"));
@@ -237,9 +171,29 @@ mod test {
     fn can_display_number_with_decimal() {
         let number = Number {
             value: 6942,
-            power: 2,
+            decimals: 2,
         };
 
         assert_eq!(format!("{number}"), String::from("69.42"));
+    }
+
+    #[test]
+    fn can_normalize_number_without_decimal() {
+        let number = Number {
+            value: 69,
+            decimals: 0,
+        };
+
+        assert_eq!(number.normalize(3).unwrap(), 69000);
+    }
+
+    #[test]
+    fn can_normalize_number_with_decimal() {
+        let number = Number {
+            value: 6942,
+            decimals: 2,
+        };
+
+        assert_eq!(number.normalize(3).unwrap(), 69420);
     }
 }

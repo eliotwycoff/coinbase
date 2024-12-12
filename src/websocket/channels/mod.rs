@@ -1,4 +1,4 @@
-use crate::common::{authentication::Signer, rate_limit::TokenBucket, types::ProductId, Error};
+use crate::common::{authentication::Signer, rate_limit::TokenBucket, Error};
 use fastwebsockets::{handshake, Frame, Payload, WebSocket};
 use http_body_util::Empty;
 use hyper::{
@@ -11,6 +11,7 @@ use hyper_util::rt::TokioIo;
 use rustls_pki_types::ServerName;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use smartstring::{LazyCompact, SmartString};
 use std::{
     future::Future,
     sync::Arc,
@@ -140,7 +141,7 @@ pub struct ChannelBuilder {
     key: Option<String>,
     signer: Option<Signer>,
     passphrase: Option<String>,
-    product_ids: Vec<ProductId>,
+    product_ids: Vec<SmartString<LazyCompact>>,
     domain: Option<String>,
     port: Option<u16>,
     token_bucket: Option<TokenBucket>,
@@ -160,8 +161,8 @@ impl ChannelBuilder {
         Ok(self)
     }
 
-    pub fn with_product_id(mut self, product_id: ProductId) -> Self {
-        self.product_ids.push(product_id);
+    pub fn with_product_id(mut self, product_id: impl Into<SmartString<LazyCompact>>) -> Self {
+        self.product_ids.push(product_id.into());
 
         self
     }
@@ -185,11 +186,6 @@ impl ChannelBuilder {
         T: 'static + ChannelType + DeserializeOwned + Send,
     {
         // Create the subscription message.
-        let product_ids = self
-            .product_ids
-            .iter()
-            .map(|product_id| product_id.into())
-            .collect::<Vec<&'static str>>();
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)?
             .as_secs()
@@ -206,7 +202,7 @@ impl ChannelBuilder {
             .ok_or_else(|| Error::param_required("authentication passphrase"))?;
         let subscription_message = serde_json::to_string(&serde_json::json!({
             "type": "subscribe",
-            "channels": [{ "name": T::channel_type(), "product_ids": product_ids }],
+            "channels": [{ "name": T::channel_type(), "product_ids": self.product_ids }],
             "signature": signature,
             "key": key,
             "passphrase": passphrase,
@@ -313,7 +309,7 @@ mod test {
         let mut channel = ChannelBuilder::default()
             .with_authentication(key, secret, passphrase)?
             .with_endpoint("ws-direct.exchange.coinbase.com", 443)
-            .with_product_id(ProductId::BtcUsd)
+            .with_product_id("BTC-USD")
             .with_token_bucket(TokenBucket::new(1_000, Duration::from_millis(100)))
             .connect::<Message>()
             .await?;
@@ -339,7 +335,7 @@ mod test {
         let channel = ChannelBuilder::default()
             .with_authentication(key, secret, passphrase)?
             .with_endpoint("ws-direct.exchange.coinbase.com", 443)
-            .with_product_id(ProductId::BtcUsd)
+            .with_product_id("BTC-USD")
             .with_token_bucket(TokenBucket::new(1_000, Duration::from_millis(100)))
             .connect::<Message>()
             .await?;

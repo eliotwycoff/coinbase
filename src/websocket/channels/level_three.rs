@@ -1,12 +1,9 @@
-use crate::{
-    common::types::{ProductId, Side},
-    websocket::channels::ChannelType,
-};
-use bigdecimal::BigDecimal;
+use crate::{common::types::Number, websocket::channels::ChannelType};
 use serde::{
     de::{self, Deserializer, SeqAccess, Visitor},
     Deserialize,
 };
+use smartstring::{LazyCompact, SmartString};
 use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     marker::PhantomData,
@@ -17,40 +14,40 @@ use uuid::Uuid;
 #[derive(Debug)]
 pub enum Message {
     Change {
-        product_id: ProductId,
+        product_id: SmartString<LazyCompact>,
         sequence: u64,
         order_id: Uuid,
-        price: BigDecimal,
-        size: BigDecimal,
+        price: Number,
+        size: Number,
         time: OffsetDateTime,
     },
     Done {
-        product_id: ProductId,
+        product_id: SmartString<LazyCompact>,
         sequence: u64,
         order_id: Uuid,
         time: OffsetDateTime,
     },
     Match {
-        product_id: ProductId,
+        product_id: SmartString<LazyCompact>,
         sequence: u64,
         maker_order_id: Uuid,
         taker_order_id: Uuid,
-        price: BigDecimal,
-        size: BigDecimal,
+        price: Number,
+        size: Number,
         time: OffsetDateTime,
     },
     Noop {
-        product_id: ProductId,
+        product_id: SmartString<LazyCompact>,
         sequence: u64,
         time: OffsetDateTime,
     },
     Open {
-        product_id: ProductId,
+        product_id: SmartString<LazyCompact>,
         sequence: u64,
         order_id: Uuid,
         side: Side,
-        price: BigDecimal,
-        size: BigDecimal,
+        price: Number,
+        size: Number,
         time: OffsetDateTime,
     },
 }
@@ -268,6 +265,13 @@ impl<'de> Deserialize<'de> for Message {
 
         deserializer.deserialize_seq(MessageVisitor)
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Side {
+    Buy,
+    Sell,
 }
 
 #[cfg(test)]

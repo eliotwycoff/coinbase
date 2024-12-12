@@ -172,7 +172,7 @@ mod test {
         let trading_pairs = client.list_trading_pairs().await?;
 
         for trading_pair in trading_pairs {
-            println!("{trading_pair}");
+            println!("{}", trading_pair.id);
         }
 
         Ok(())

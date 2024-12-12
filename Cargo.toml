@@ -7,10 +7,9 @@ edition = "2021"
 # Types
 bigdecimal = { version = "0.4.7", features = ["serde-json"] }
 rustls-pki-types = "1.10.0"
-serde = { version = "1.0.215", features = ["derive"] }
+serde = { version = "1.0.216", features = ["derive"] }
 serde_json = { version = "1.0.133" }
 smartstring = { version = "1.0.1", features = ["serde"] }
-strum = { version = "0.26.3", features = ["derive"] }
 time = { version = "0.3.37", features = ["serde", "formatting", "parsing"] }
 uuid = { version = "1.11.0", features = ["serde"] }
 webpki-roots = "0.26.7"
