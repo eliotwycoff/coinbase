@@ -106,7 +106,7 @@ impl<'de> Deserialize<'de> for Number {
 impl Display for Number {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let mut value = self.value;
-        let mut buffer = [0u8; 21];
+        let mut buffer = [b'0'; 21];
         let mut n = 0;
 
         for (i, j) in (0..21).rev().enumerate() {
@@ -120,6 +120,13 @@ impl Display for Number {
             n += 1;
 
             if value == 0 {
+                if i <= self.decimals {
+                    let zero_count = self.decimals - i;
+
+                    buffer[j - zero_count] = b'.';
+                    n += 1 + zero_count;
+                }
+
                 break;
             }
         }
@@ -175,6 +182,16 @@ mod test {
         };
 
         assert_eq!(format!("{number}"), String::from("69.42"));
+    }
+
+    #[test]
+    fn can_display_number_with_leading_zero_decimals() {
+        let number = Number {
+            value: 6942,
+            decimals: 6,
+        };
+
+        assert_eq!(format!("{number}"), String::from("0.006942"));
     }
 
     #[test]
