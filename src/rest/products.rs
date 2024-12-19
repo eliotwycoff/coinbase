@@ -1,8 +1,7 @@
 use crate::{
-    common::Error,
+    common::{types::Number, Error},
     rest::{Client, DOMAIN},
 };
-use bigdecimal::BigDecimal;
 use serde::Deserialize;
 use serde_json::Value;
 use smartstring::{LazyCompact, SmartString};
@@ -62,7 +61,7 @@ impl Products for Client {
 pub struct Product {
     pub auction_mode: bool,
     pub base_currency: SmartString<LazyCompact>,
-    pub base_increment: BigDecimal,
+    pub base_increment: Number,
     pub cancel_only: bool,
     pub display_name: SmartString<LazyCompact>,
     pub fx_stablecoin: bool,
@@ -70,11 +69,11 @@ pub struct Product {
     pub id: SmartString<LazyCompact>,
     pub limit_only: bool,
     pub margin_enabled: bool,
-    pub max_slippage_percentage: BigDecimal,
-    pub min_market_funds: BigDecimal,
+    pub max_slippage_percentage: Number,
+    pub min_market_funds: Number,
     pub post_only: bool,
     pub quote_currency: SmartString<LazyCompact>,
-    pub quote_increment: BigDecimal,
+    pub quote_increment: Number,
     pub status: Status,
     pub status_message: SmartString<LazyCompact>,
     pub trading_disabled: bool,
@@ -125,10 +124,10 @@ pub enum Status {
 
 #[derive(Debug, Deserialize)]
 pub struct ProductBook {
-    pub asks: Vec<(BigDecimal, BigDecimal, Uuid)>,
+    pub asks: Vec<(Number, Number, Uuid)>,
     pub auction: Option<Value>,
     pub auction_mode: bool,
-    pub bids: Vec<(BigDecimal, BigDecimal, Uuid)>,
+    pub bids: Vec<(Number, Number, Uuid)>,
     pub sequence: u64,
     #[serde(with = "time::serde::iso8601")]
     pub time: OffsetDateTime,
@@ -139,18 +138,18 @@ impl Display for ProductBook {
         write!(f, "ProductBook:\n")?;
         write!(f, " Asks:\n")?;
 
-        for (price, size, order_id) in self.asks.iter() {
+        for (price, size, order_id) in self.asks.iter().rev() {
             write!(f, "  Price: {price}, Size: {size}, Order ID: {order_id}\n")?;
         }
 
-        write!(f, " Auction: {:?}\n", self.auction)?;
-        write!(f, " Auction Mode: {}\n", self.auction_mode)?;
         write!(f, " Bids:\n")?;
 
         for (price, size, order_id) in self.bids.iter() {
             write!(f, "  Price: {price}, Size: {size}, Order ID: {order_id}\n")?;
         }
 
+        write!(f, " Auction: {:?}\n", self.auction)?;
+        write!(f, " Auction Mode: {}\n", self.auction_mode)?;
         write!(f, " Sequence: {}\n", self.sequence)?;
         write!(f, " Time: {}\n", self.time)?;
 

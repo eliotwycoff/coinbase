@@ -5,8 +5,7 @@ edition = "2021"
 
 [dependencies]
 # Types
-bigdecimal = { version = "0.4.7", features = ["serde-json"] }
-rustls-pki-types = "1.10.0"
+rustls-pki-types = "1.10.1"
 serde = { version = "1.0.216", features = ["derive"] }
 serde_json = { version = "1.0.133" }
 smartstring = { version = "1.0.1", features = ["serde"] }
@@ -21,7 +20,7 @@ sha2 = "0.10.8"
 
 # API
 fastwebsockets = { version = "0.8.0", features = ["upgrade"] }
-hyper = "1.5.1"
+hyper = "1.5.2"
 hyper-util = "0.1.10"
 http-body-util = "0.1.2"
 reqwest = "0.12.9"

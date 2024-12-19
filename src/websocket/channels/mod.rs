@@ -161,6 +161,24 @@ impl ChannelBuilder {
         Ok(self)
     }
 
+    pub fn with_key(mut self, key: impl Into<String>) -> Self {
+        self.key = Some(key.into());
+
+        self
+    }
+
+    pub fn with_signer(mut self, signer: Signer) -> Self {
+        self.signer = Some(signer);
+
+        self
+    }
+
+    pub fn with_passphrase(mut self, passphrase: String) -> Self {
+        self.passphrase = Some(passphrase);
+
+        self
+    }
+
     pub fn with_product_id(mut self, product_id: impl Into<SmartString<LazyCompact>>) -> Self {
         self.product_ids.push(product_id.into());
 

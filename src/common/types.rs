@@ -7,8 +7,8 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 #[derive(Debug)]
 pub struct Number {
-    value: u64,
-    decimals: usize,
+    pub value: u64,
+    pub decimals: usize,
 }
 
 impl Number {
@@ -27,8 +27,7 @@ impl Number {
             10 => 10_000_000_000,
             11 => 100_000_000_000,
             12 => 1_000_000_000_000,
-            d if d > 0 => return Err(Error::number("cannot normalize past 12 digits")),
-            _ => return Err(Error::number("cannot normalize to fewer decimals")),
+            _ => return Err(Error::number("cannot normalize past 12 digits")),
         };
 
         Ok(self
@@ -120,7 +119,7 @@ impl Display for Number {
             n += 1;
 
             if value == 0 {
-                if i <= self.decimals {
+                if i < self.decimals {
                     let zero_count = self.decimals - i;
 
                     buffer[j - zero_count] = b'.';
@@ -141,6 +140,27 @@ impl Display for Number {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn can_deserialize_single_digit_without_decimal() {
+        assert!(matches!(
+            serde_json::from_slice::<Number>(r#""1""#.as_bytes()).unwrap(),
+            Number {
+                value: 1,
+                decimals: 0,
+            }
+        ))
+    }
+
+    #[test]
+    fn can_display_single_digit_without_decimal() {
+        let number = Number {
+            value: 1,
+            decimals: 0,
+        };
+
+        assert_eq!(format!("{number}"), String::from("1"));
+    }
 
     #[test]
     fn can_deserialize_number_without_decimal() {
