@@ -1,4 +1,4 @@
-use crate::{common::types::Number, websocket::channels::ChannelType};
+use crate::exchange::{common::types::Number, websocket::channels::ChannelType};
 use serde::{
     de::{self, Deserializer, SeqAccess, Visitor},
     Deserialize,
@@ -277,44 +277,66 @@ pub enum Side {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::test;
+    use tracing::info;
 
-    #[test]
-    fn can_deserialize_change_message() {
+    #[tokio::test]
+    async fn can_deserialize_change_message() -> test::Result<()> {
+        test::setup().await?;
+
         let input = r#"["change","KSM-USD","1085439001","5ca12898-a4e0-4da5-83e7-58f6c8b23a08","47.39","466.02","2024-12-07T03:05:26.853178Z"]"#;
         let change_message: Message = serde_json::from_slice(input.as_bytes()).unwrap();
 
-        println!("change_message => {change_message}");
+        info!("change_message => {change_message}");
+
+        Ok(())
     }
 
-    #[test]
-    fn can_deserialize_done_message() {
+    #[tokio::test]
+    async fn can_deserialize_done_message() -> test::Result<()> {
+        test::setup().await?;
+
         let input = r#"["done","KSM-USD","1085439002","c61973b4-64c6-42f5-92ad-0122b6835346","2024-12-07T03:05:26.858722Z"]"#;
         let done_message: Message = serde_json::from_slice(input.as_bytes()).unwrap();
 
-        println!("done_message => {done_message}");
+        info!("done_message => {done_message}");
+
+        Ok(())
     }
 
-    #[test]
-    fn can_deserialize_match_message() {
+    #[tokio::test]
+    async fn can_deserialize_match_message() -> test::Result<()> {
+        test::setup().await?;
+
         let input = r#"["match","KSM-USD","1085550786","f38ca06b-a427-4072-94db-1489294d990b","1b03667a-ada9-45b6-b6bd-7ef8b153c3b5","46.5","4.6203","2024-12-07T03:45:03.660871Z"]"#;
         let match_message: Message = serde_json::from_slice(input.as_bytes()).unwrap();
 
-        println!("match_message => {match_message}");
+        info!("match_message => {match_message}");
+
+        Ok(())
     }
 
-    #[test]
-    fn can_deserialize_noop_message() {
+    #[tokio::test]
+    async fn can_deserialize_noop_message() -> test::Result<()> {
+        test::setup().await?;
+
         let input = r#"["noop","KSM-USD","1085550970","2024-12-07T03:45:06.664022Z"]"#;
         let noop_message: Message = serde_json::from_slice(input.as_bytes()).unwrap();
 
-        println!("noop_message => {noop_message}");
+        info!("noop_message => {noop_message}");
+
+        Ok(())
     }
 
-    #[test]
-    fn can_deserialize_open_message() {
+    #[tokio::test]
+    async fn can_deserialize_open_message() -> test::Result<()> {
+        test::setup().await?;
+
         let input = r#"["open","KSM-USD","1085550965","757aaa18-41e6-4374-9341-769bf32d2c72","sell","46.84","222.7125","2024-12-07T03:45:06.586641Z"]"#;
         let open_message: Message = serde_json::from_slice(input.as_bytes()).unwrap();
 
-        println!("open_message => {open_message}");
+        info!("open_message => {open_message}");
+
+        Ok(())
     }
 }

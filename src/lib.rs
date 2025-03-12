@@ -1,11 +1,14 @@
-pub mod common;
-pub mod rest;
-pub mod websocket;
+pub mod advanced;
+pub mod exchange;
 
-use common::{authentication::Signer, rate_limit::TokenBucket, Error};
-use rest::{
+use exchange::common::{authentication::Signer, rate_limit::TokenBucket, Error};
+use exchange::rest::{
     products::{Product, Products},
     Client, ClientBuilder,
+};
+use exchange::websocket::channels::{
+    level_three::{Message, Side},
+    Channel, ChannelBuilder,
 };
 use smartstring::{LazyCompact, SmartString};
 use std::{
@@ -13,11 +16,8 @@ use std::{
     time::Duration,
 };
 use tokio::time::sleep;
+use tracing::debug;
 use uuid::Uuid;
-use websocket::channels::{
-    level_three::{Message, Side},
-    Channel, ChannelBuilder,
-};
 
 pub struct OrderBook {
     // Book data
@@ -116,7 +116,7 @@ impl OrderBook {
                 size,
                 ..
             } => {
-                println!("Sequence => {}/{}", self.sequence, sequence);
+                debug!("Sequence => {}/{}", self.sequence, sequence);
 
                 if sequence == self.sequence + 1 {
                     let price = price.normalize(self.product.quote_increment.decimals)?;
@@ -131,7 +131,7 @@ impl OrderBook {
             Message::Done {
                 sequence, order_id, ..
             } => {
-                println!("Sequence => {}/{}", self.sequence, sequence);
+                debug!("Sequence => {}/{}", self.sequence, sequence);
 
                 if sequence == self.sequence + 1 {
                     self.delete(order_id);
@@ -147,7 +147,7 @@ impl OrderBook {
                 size,
                 ..
             } => {
-                println!("Sequence => {}/{}", self.sequence, sequence);
+                debug!("Sequence => {}/{}", self.sequence, sequence);
 
                 if sequence == self.sequence + 1 {
                     let price = price.normalize(self.product.quote_increment.decimals)?;
@@ -169,7 +169,7 @@ impl OrderBook {
                 }
             }
             Message::Noop { sequence, .. } => {
-                println!("Sequence => {}/{}", self.sequence, sequence);
+                debug!("Sequence => {}/{}", self.sequence, sequence);
 
                 if sequence == self.sequence + 1 {
                     self.sequence += 1;
@@ -185,7 +185,7 @@ impl OrderBook {
                 size,
                 ..
             } => {
-                println!("Sequence => {}/{}", self.sequence, sequence);
+                debug!("Sequence => {}/{}", self.sequence, sequence);
 
                 if sequence == self.sequence + 1 {
                     let price = price.normalize(self.product.quote_increment.decimals)?;
@@ -443,7 +443,7 @@ impl OrderBookBuilder {
         let mut order_book = OrderBook {
             product,
             best_ask: *asks.keys().next().unwrap_or(&0),
-            best_bid: *bids.keys().next().unwrap_or(&0),
+            best_bid: *bids.keys().rev().next().unwrap_or(&0),
             asks,
             bids,
             sequence: product_book.sequence,
@@ -464,10 +464,21 @@ impl OrderBookBuilder {
 #[cfg(test)]
 mod test {
     use super::*;
+    use tracing::info;
+
+    pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+    pub async fn setup() -> Result<()> {
+        dotenvy::from_filename(".env")?;
+        // TODO: Init telemetry.
+        // telemetry::init_tracing("coinbase-unit-tests", None);
+
+        Ok(())
+    }
 
     #[tokio::test]
-    async fn can_get_up_to_date_order_book() -> Result<(), Box<dyn std::error::Error>> {
-        dotenvy::from_filename(".env")?;
+    async fn can_get_up_to_date_order_book() -> Result<()> {
+        setup().await?;
 
         // Load the credentials.
         let key = std::env::var("CB_ACCESS_KEY")?;
@@ -477,15 +488,13 @@ mod test {
         // Set up the order book.
         let order_book = OrderBookBuilder::default()
             .with_authentication(key, secret, passphrase)?
-            .with_product_id("BTC-USD")
+            .with_product_id("KSM-USD")
             .with_cache_delay(10_000)
             .build()
             .await?;
 
-        // println!("order_book asks => {:?}", order_book.asks);
-        // println!("order_book bids => {:?}", order_book.bids);
-        println!("order_book best_ask => {}", order_book.best_ask);
-        println!("order_book best_bid => {}", order_book.best_bid);
+        info!("order_book best_ask => {}", order_book.best_ask);
+        info!("order_book best_bid => {}", order_book.best_bid);
 
         Ok(())
     }

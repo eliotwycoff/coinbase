@@ -1,4 +1,4 @@
-use crate::common::{rate_limit::TokenBucket, Error};
+use crate::exchange::common::{rate_limit::TokenBucket, Error};
 use reqwest::{Client as HttpClient, RequestBuilder};
 use serde::de::DeserializeOwned;
 

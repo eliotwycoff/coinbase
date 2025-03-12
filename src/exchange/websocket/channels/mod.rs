@@ -1,4 +1,4 @@
-use crate::common::{authentication::Signer, rate_limit::TokenBucket, Error};
+use crate::exchange::common::{authentication::Signer, rate_limit::TokenBucket, Error};
 use fastwebsockets::{handshake, Frame, Payload, WebSocket};
 use http_body_util::Empty;
 use hyper::{
@@ -27,6 +27,7 @@ use tokio_rustls::{
     rustls::{ClientConfig, RootCertStore},
     TlsConnector,
 };
+use tracing::debug;
 
 pub mod level_three;
 
@@ -203,21 +204,27 @@ impl ChannelBuilder {
     where
         T: 'static + ChannelType + DeserializeOwned + Send,
     {
-        // Create the subscription message.
+        debug!("Creating signing key");
+        let key = self
+            .key
+            .ok_or_else(|| Error::param_required("authentication key"))?;
+
+        debug!("Generating signature");
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)?
             .as_secs()
             .to_string();
-        let key = self
-            .key
-            .ok_or_else(|| Error::param_required("authentication key"))?;
         let signature = self
             .signer
             .ok_or_else(|| Error::param_required("authentication secret"))?
             .get_cb_access_sign(timestamp.as_str(), "/users/self/verify", "", "GET")?;
+
+        debug!("Fetching passphrase");
         let passphrase = self
             .passphrase
             .ok_or_else(|| Error::param_required("authentication passphrase"))?;
+
+        debug!("Creating subscription message");
         let subscription_message = serde_json::to_string(&serde_json::json!({
             "type": "subscribe",
             "channels": [{ "name": T::channel_type(), "product_ids": self.product_ids }],
@@ -227,16 +234,23 @@ impl ChannelBuilder {
             "timestamp": timestamp,
         }))?;
 
-        // Connect to the endpoint.
+        debug!("Fetching endpoint domain");
         let domain = self
             .domain
             .ok_or_else(|| Error::param_required("endpoint domain"))?;
+
+        debug!("Fetching endpoint port");
         let port = self
             .port
             .ok_or_else(|| Error::param_required("endpoint port"))?;
+
+        debug!("Establishing TCP stream");
         let tcp_stream = TcpStream::connect(format!("{domain}:{port}")).await?;
 
-        // Upgrade to TLS.
+        debug!("Getting TLS server name");
+        let tls_domain = ServerName::try_from(domain.clone())?;
+
+        debug!("Upgrading to TLS");
         let mut root_cert_store = RootCertStore::empty();
 
         root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -245,10 +259,9 @@ impl ChannelBuilder {
             .with_root_certificates(root_cert_store)
             .with_no_client_auth();
         let tls_connector = TlsConnector::from(Arc::new(tls_config));
-        let tls_domain = ServerName::try_from(domain.clone())?;
         let tls_stream = tls_connector.connect(tls_domain, tcp_stream).await?;
 
-        // Upgrade to WSS.
+        debug!("Generating WSS upgrade request");
         let request = Request::builder()
             .method("GET")
             .uri(format!("https://{domain}/"))
@@ -261,14 +274,15 @@ impl ChannelBuilder {
             )
             .header("Sec-WebSocket-Version", "13")
             .body(Empty::<Bytes>::new())?;
+
+        debug!("Upgrading to WSS");
         let (mut ws, _) = handshake::client(&SpawnExecutor, request, tls_stream).await?;
 
-        // Configure the connection.
         ws.set_writev(false);
         ws.set_auto_close(true);
         ws.set_auto_pong(true);
 
-        // Set up the channel object.
+        debug!("Creating WebSocket channel object");
         let mut channel = Channel {
             ws,
             cache: None,
@@ -277,18 +291,18 @@ impl ChannelBuilder {
                 .ok_or_else(|| Error::param_required("token bucket"))?,
         };
 
-        // Send the subscription message.
+        debug!("Sending subscription message");
         channel
             .write_frame(Frame::text(Payload::Borrowed(
                 subscription_message.as_bytes(),
             )))
             .await?;
 
-        // Deserialize the incoming subscriptions message.
+        debug!("Deserializing subscriptions response");
         let _ = serde_json::from_slice::<Value>(channel.read_frame().await?.payload.as_ref())?;
 
         if T::parse_schema() {
-            // Deserialize the incoming schema message.
+            debug!("Deserializing schema response");
             let _ = serde_json::from_slice::<Value>(channel.read_frame().await?.payload.as_ref())?;
         }
 
@@ -311,12 +325,12 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::websocket::channels::level_three::Message;
+    use crate::{exchange::websocket::channels::level_three::Message, test};
     use tokio::time::{sleep, Duration};
 
     #[tokio::test]
-    async fn can_receive_messages() -> Result<(), Box<dyn std::error::Error>> {
-        dotenvy::from_filename(".env")?;
+    async fn can_receive_messages() -> test::Result<()> {
+        test::setup().await?;
 
         // Load the credentials.
         let key = std::env::var("CB_ACCESS_KEY")?;
@@ -341,8 +355,8 @@ mod test {
     }
 
     #[tokio::test]
-    async fn can_cache_messages() -> Result<(), Box<dyn std::error::Error>> {
-        dotenvy::from_filename(".env")?;
+    async fn can_cache_messages() -> test::Result<()> {
+        test::setup().await?;
 
         // Load the credentials.
         let key = std::env::var("CB_ACCESS_KEY")?;

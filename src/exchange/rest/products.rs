@@ -1,4 +1,4 @@
-use crate::{
+use crate::exchange::{
     common::{types::Number, Error},
     rest::{Client, DOMAIN},
 };
@@ -160,43 +160,58 @@ impl Display for ProductBook {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{common::rate_limit::TokenBucket, rest::ClientBuilder};
+    use crate::{
+        exchange::{common::rate_limit::TokenBucket, rest::ClientBuilder},
+        test,
+    };
     use std::time::Duration;
+    use tracing::info;
 
     #[tokio::test]
-    async fn can_list_trading_pairs() -> Result<(), Box<dyn std::error::Error>> {
+    async fn can_list_trading_pairs() -> test::Result<()> {
+        test::setup().await?;
+
         let client = ClientBuilder::new()
             .with_token_bucket(TokenBucket::new(15, Duration::from_millis(100)))
             .build()?;
         let trading_pairs = client.list_trading_pairs().await?;
 
-        for trading_pair in trading_pairs {
-            println!("{}", trading_pair.id);
-        }
+        println!(
+            "{}",
+            trading_pairs
+                .into_iter()
+                .map(|pair| pair.id)
+                .collect::<Vec<SmartString<LazyCompact>>>()
+                .join(", ")
+        );
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn can_get_single_product() -> Result<(), Box<dyn std::error::Error>> {
+    async fn can_get_single_product() -> test::Result<()> {
+        test::setup().await?;
+
         let client = ClientBuilder::new()
             .with_token_bucket(TokenBucket::new(15, Duration::from_millis(100)))
             .build()?;
         let product = client.get_single_product("KSM-USD").await?;
 
-        println!("{product}");
+        info!("{product}");
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn can_get_product_book() -> Result<(), Box<dyn std::error::Error>> {
+    async fn can_get_product_book() -> test::Result<()> {
+        test::setup().await?;
+
         let client = ClientBuilder::new()
             .with_token_bucket(TokenBucket::new(15, Duration::from_millis(100)))
             .build()?;
         let product_book = client.get_product_book("KSM-USD").await?;
 
-        println!("product_book => {product_book}");
+        info!("product_book => {product_book}");
 
         Ok(())
     }
